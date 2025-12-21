@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자재관리 로그스톡</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; max-width: 500px; margin: 0 auto; background: #f4f7f6; }
+        .card { background: white; padding: 20px; border-radius: 12px; shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h2 { color: #333; margin-top: 0; }
+        .log-item { border-bottom: 1px solid #eee; padding: 10px 0; font-size: 14px; }
+        .log-date { color: #888; font-size: 12px; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #2ecc71; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #27ae60; }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <div class="card">
+            <h2 id="item_name">불러오는 중...</h2>
+            <p id="item_id_display" style="color: #666;"></p>
+        </div>
+
+        <div class="card">
+            <h3>📝 이력 기록하기</h3>
+            <select id="author">
+                <option value="">작성자 선택</option>
+                <option value="사용자1">사용자 1</option>
+                <option value="사용자2">사용자 2</option>
+                <option value="사용자3">사용자 3</option>
+                <option value="사용자4">사용자 4</option>
+                <option value="사용자5">사용자 5</option>
+            </select>
+            <textarea id="content" placeholder="특이사항을 입력하세요 (예: 5개 입고, 파손 확인 등)"></textarea>
+            <button onclick="saveLog()">기록 저장</button>
+        </div>
+
+        <div class="card">
+            <h3>📜 과거 이력</h3>
+            <div id="log_list">이력이 없습니다.</div>
+        </div>
+    </div>
+
+    <script>
+        // 1. 설정 (본인의 정보로 수정하세요)
+        const SUPABASE_URL = "https://tpbqizzzcsfxjilkbfwc.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_ElqhAkEJ8st_UU73voffwQ_tFP8mO02";
+
+        // URL에서 item_id 가져오기 (예: ?id=A-001)
+        const urlParams = new URLSearchParams(window.location.search);
+        const itemId = urlParams.get('id');
+
+        if (!itemId) {
+            document.body.innerHTML = "<h1>오류: QR 코드가 올바르지 않습니다. (ID 누락)</h1>";
+        }
+
+        // 2. 데이터 불러오기 (Read)
+        async function loadData() {
+            // 물품 정보와 이력을 한 번에 가져오기 (Join 쿼리)
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/items?item_id=eq.${itemId}&select=*,item_logs(*)`, {
+                headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+            });
+            const data = await response.json();
+
+            if (data.length > 0) {
+                const item = data[0];
+                document.getElementById('item_name').innerText = item.item_name;
+                document.getElementById('item_id_display').innerText = `ID: ${item.item_id}`;
+
+                // 이력 최신순 정렬 후 표시
+                const logs = item.item_logs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                const logHtml = logs.map(log => `
+                    <div class="log-item">
+                        <strong>${log.author || '익명'}</strong>: ${log.content}
+                        <div class="log-date">${new Date(log.created_at).toLocaleString()}</div>
+                    </div>
+                `).join('');
+                document.getElementById('log_list').innerHTML = logHtml || "이력이 없습니다.";
+            } else {
+                document.getElementById('item_name').innerText = "등록되지 않은 물품";
+            }
+        }
+
+        // 3. 데이터 저장하기 (Create)
+        async function saveLog() {
+            const content = document.getElementById('content').value;
+            const author = document.getElementById('author').value;
+
+            if (!content || !author) return alert("작성자와 내용을 입력해주세요!");
+
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/item_logs`, {
+                method: "POST",
+                headers: {
+                    "apikey": SUPABASE_KEY,
+                    "Authorization": `Bearer ${SUPABASE_KEY}`,
+                    "Content-Type": "application/json",
+                    "Prefer": "return=representation"
+                },
+                body: JSON.stringify({
+                    target_item_id: itemId,
+                    content: content,
+                    author: author
+                })
+            });
+
+            if (response.ok) {
+                alert("기록되었습니다!");
+                document.getElementById('content').value = ""; // 입력창 비우기
+                loadData(); // 목록 새로고침
+            } else {
+                alert("저장 실패!");
+            }
+        }
+
+        // 초기 실행
+        loadData();
+    </script>
+</body>
+</html>
