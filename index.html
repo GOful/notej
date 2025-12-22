@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>자재 이력관리 시스템</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f7f6; color: #333; }
+        /* 기존 스타일 */
+        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f7f6; color: #333; margin-bottom: 80px; }
         h1 { color: #005500; border-bottom: 2px solid #005500; padding-bottom: 10px; }
         .status-bar { display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; font-size: 0.9em; }
         .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
@@ -23,6 +24,28 @@
         .log-table th, .log-table td { border-bottom: 1px solid #eee; padding: 12px; text-align: left; }
         .log-table th { background: #f4f4f4; color: #333; }
         .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; background: #e8f5e9; color: #2e7d32; font-weight: bold; }
+
+        /* [추가] 우측 하단 플로팅 버튼 스타일 */
+        .fab { 
+            position: fixed; bottom: 30px; right: 30px; 
+            width: 60px; height: 60px; background: #005500; 
+            border-radius: 50%; color: white; font-size: 30px; 
+            border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.3); 
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .fab:hover { background: #007700; transform: scale(1.1); transition: 0.2s; }
+
+        /* [추가] 입력 모달창 스타일 */
+        .modal { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal-content { 
+            background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-content h3 { margin-top: 0; color: #005500; }
+        .modal-content input { width: 100%; box-sizing: border-box; margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -60,11 +83,35 @@
         </table>
     </div>
 
+    <button class="fab" onclick="openModal()" title="이력 추가">+</button>
+
+    <div id="logModal" class="modal">
+        <div class="modal-content">
+            <h3>📝 새 이력 추가</h3>
+            <label>물품 코드</label>
+            <input type="text" id="newLogCode" readonly style="background: #eee;">
+            <label>담당자 명</label>
+            <input type="text" id="newLogPerson" placeholder="이름을 입력하세요">
+            <label>이력 내용 (구분)</label>
+            <input type="text" id="newLogContext" placeholder="예: 구매입고, 수리완료 등">
+            <div style="display: flex; gap: 10px;">
+                <button onclick="saveLog()" style="flex: 1;">저장</button>
+                <button onclick="closeModal()" style="flex: 1; background: #666;">취소</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const URL = "https://tpbqizzzcsfxjilkbfwc.supabase.co";
         const KEY = "sb_publishable_ElqhAkEJ8st_UU73voffwQ_tFP8mO02";
-        const headers = { "apikey": KEY, "Authorization": "Bearer " + KEY.trim(), "Content-Type": "application/json" };
+        const headers = { 
+            "apikey": KEY, 
+            "Authorization": "Bearer " + KEY.trim(), 
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal" 
+        };
 
+        // 연결 진단
         async function checkConnection() {
             const dot = document.getElementById('status-dot');
             const text = document.getElementById('status-text');
@@ -83,6 +130,7 @@
             }
         }
 
+        // 조회 함수
         async function getHistory(targetCode = null) {
             const codeInput = document.getElementById('itemCodeInput');
             const code = targetCode || codeInput.value.trim();
@@ -120,9 +168,61 @@
             }
         }
 
+        // [추가] 모달 제어 함수
+        function openModal() {
+            const currentCode = document.getElementById('disp-code').innerText;
+            if (!currentCode) {
+                alert("먼저 물품을 조회해 주세요.");
+                return;
+            }
+            document.getElementById('newLogCode').value = currentCode;
+            document.getElementById('logModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('logModal').style.display = 'none';
+        }
+
+        // [추가] 새 이력 저장 함수 (POST)
+        async function saveLog() {
+            const code = document.getElementById('newLogCode').value;
+            const person = document.getElementById('newLogPerson').value.trim();
+            const context = document.getElementById('newLogContext').value.trim();
+
+            if (!person || !context) {
+                alert("모든 필드를 입력해 주세요.");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${URL}/rest/v1/logs`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        logs_code: code,
+                        logs_person: person,
+                        logs_context: context
+                    })
+                });
+
+                if (res.ok) {
+                    alert("이력이 성공적으로 추가되었습니다.");
+                    closeModal();
+                    getHistory(code); // 리스트 갱신
+                    document.getElementById('newLogPerson').value = "";
+                    document.getElementById('newLogContext').value = "";
+                } else {
+                    const err = await res.text();
+                    alert("저장 실패: " + err);
+                }
+            } catch (e) {
+                console.error(e);
+                alert("네트워크 오류가 발생했습니다.");
+            }
+        }
+
         window.onload = async () => {
             await checkConnection();
-            // URL 파라미터 추출 (더 안전한 방식)
             const params = new URLSearchParams(window.location.search);
             const code = params.get('code');
             if (code) getHistory(code);
