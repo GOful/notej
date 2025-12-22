@@ -2,231 +2,93 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>자재 이력관리 시스템</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        /* 기존 스타일 */
-        body { font-family: 'Malgun Gothic', sans-serif; padding: 20px; line-height: 1.6; background-color: #f4f7f6; color: #333; margin-bottom: 80px; }
-        h1 { color: #005500; border-bottom: 2px solid #005500; padding-bottom: 10px; }
-        .status-bar { display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; font-size: 0.9em; }
-        .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-        .dot.testing { background: #f1c40f; }
-        .dot.online { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
-        .dot.offline { background: #e74c3c; box-shadow: 0 0 8px #e74c3c; }
-        .search-box { margin-bottom: 25px; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        input { padding: 12px; width: 300px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 1rem; }
-        button { padding: 12px 24px; cursor: pointer; background: #005500; border: none; color: white; border-radius: 4px; font-weight: bold; font-size: 1rem; }
-        button:hover { background: #007700; }
-        .result-section { background: #fff; padding: 25px; border-radius: 8px; border: 1px solid #ddd; display: none; }
-        .info-grid { display: grid; grid-template-columns: 120px 1fr; gap: 10px; margin-bottom: 25px; padding: 15px; background: #f9f9f9; border-radius: 5px; }
-        .info-label { font-weight: bold; color: #666; }
-        .log-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        .log-table th, .log-table td { border-bottom: 1px solid #eee; padding: 12px; text-align: left; }
-        .log-table th { background: #f4f4f4; color: #333; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.85em; background: #e8f5e9; color: #2e7d32; font-weight: bold; }
-
-        /* [추가] 우측 하단 플로팅 버튼 스타일 */
-        .fab { 
-            position: fixed; bottom: 30px; right: 30px; 
-            width: 60px; height: 60px; background: #005500; 
-            border-radius: 50%; color: white; font-size: 30px; 
-            border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.3); 
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-        }
-        .fab:hover { background: #007700; transform: scale(1.1); transition: 0.2s; }
-
-        /* [추가] 입력 모달창 스타일 */
-        .modal { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 1000;
-        }
-        .modal-content { 
-            background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        }
-        .modal-content h3 { margin-top: 0; color: #005500; }
-        .modal-content input { width: 100%; box-sizing: border-box; margin-bottom: 15px; }
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .search-box { margin-bottom: 20px; padding: 15px; background: #f4f4f4; border-radius: 8px; }
+        input { padding: 8px; width: 200px; }
+        button { padding: 8px 15px; cursor: pointer; background: #33b5e5; border: none; color: white; border-radius: 4px; }
+        .log-item { border-bottom: 1px solid #ddd; padding: 10px 0; list-style: none; }
+        .status-tag { font-weight: bold; color: #2c3e50; }
     </style>
 </head>
 <body>
 
-    <h1>🛰️ 자재 이력관리 시스템</h1>
-
-    <div class="status-bar">
-        <span id="status-dot" class="dot testing"></span>
-        <span id="status-text">연결 진단 중...</span>
-    </div>
+    <h2>📦 자재 이력 조회 시스템</h2>
 
     <div class="search-box">
-        <input type="text" id="itemCodeInput" placeholder="물품 코드를 입력하세요" onkeypress="if(event.keyCode==13) getHistory()">
-        <button onclick="getHistory()">데이터 조회</button>
+        <input type="text" id="itemCodeInput" placeholder="물품 코드를 입력하세요 (예: ITEM001)">
+        <button onclick="getHistory()">조회하기</button>
     </div>
 
-    <div id="resultArea" class="result-section">
-        <h2>📋 물품 상세 정보</h2>
-        <div class="info-grid">
-            <div class="info-label">물품 코드</div><div id="disp-code" style="font-family: monospace; font-weight: bold;"></div>
-            <div class="info-label">규격(Spec)</div><div id="disp-spec"></div>
-            <div class="info-label">용도(Use)</div><div id="disp-use"></div>
-        </div>
-        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-        <h3>🕒 변경 이력 (Logs)</h3>
-        <table class="log-table">
-            <thead>
-                <tr>
-                    <th>날짜/시간</th>
-                    <th>구분(Context)</th>
-                    <th>담당자</th>
-                </tr>
-            </thead>
-            <tbody id="logList"></tbody>
-        </table>
-    </div>
-
-    <button class="fab" onclick="openModal()" title="이력 추가">+</button>
-
-    <div id="logModal" class="modal">
-        <div class="modal-content">
-            <h3>📝 새 이력 추가</h3>
-            <label>물품 코드</label>
-            <input type="text" id="newLogCode" readonly style="background: #eee;">
-            <label>담당자 명</label>
-            <input type="text" id="newLogPerson" placeholder="이름을 입력하세요">
-            <label>이력 내용 (구분)</label>
-            <input type="text" id="newLogContext" placeholder="예: 구매입고, 수리완료 등">
-            <div style="display: flex; gap: 10px;">
-                <button onclick="saveLog()" style="flex: 1;">저장</button>
-                <button onclick="closeModal()" style="flex: 1; background: #666;">취소</button>
-            </div>
-        </div>
+    <div id="result-area" style="display:none;">
+        <h3>물품 정보: <span id="itemName"></span></h3>
+        <ul id="logList" style="padding: 0;"></ul>
     </div>
 
     <script>
-        const URL = "https://tpbqizzzcsfxjilkbfwc.supabase.co";
-        const KEY = "sb_publishable_ElqhAkEJ8st_UU73voffwQ_tFP8mO02";
-        const headers = { 
-            "apikey": KEY, 
-            "Authorization": "Bearer " + KEY.trim(), 
-            "Content-Type": "application/json",
-            "Prefer": "return=minimal" 
-        };
+        // Supabase 설정 (본인의 정보로 꼭 변경하세요!)
+        const SUPABASE_URL = 'https://your-project-url.supabase.co';
+        const SUPABASE_KEY = 'your-anon-key';
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // 연결 진단
-        async function checkConnection() {
-            const dot = document.getElementById('status-dot');
-            const text = document.getElementById('status-text');
-            try {
-                const res = await fetch(`${URL}/rest/v1/items?select=id&limit=1`, { headers });
-                if (res.ok) {
-                    dot.className = 'dot online';
-                    text.innerHTML = "시스템 가동 중 (Online)";
-                } else {
-                    dot.className = 'dot offline';
-                    text.innerHTML = "연결 오류";
-                }
-            } catch (e) {
-                dot.className = 'dot offline';
-                text.innerText = "서버 연결 불가";
+        async function getHistory() {
+            const code = document.getElementById('itemCodeInput').value.trim();
+            const logList = document.getElementById('logList');
+            const resultArea = document.getElementById('result-area');
+            const itemNameSpan = document.getElementById('itemName');
+
+            if (!code) {
+                alert("코드를 입력해주세요.");
+                return;
             }
-        }
 
-        // 조회 함수
-        async function getHistory(targetCode = null) {
-            const codeInput = document.getElementById('itemCodeInput');
-            const code = targetCode || codeInput.value.trim();
-            if (!code) return;
-            if (targetCode) codeInput.value = targetCode;
+            // A. items 테이블에서 품명 가져오기
+            const { data: item, error: itemErr } = await supabase
+                .from('items')
+                .select('name')
+                .eq('code', code)
+                .single();
 
-            try {
-                const itemRes = await fetch(`${URL}/rest/v1/items?item_code=eq.${code}&select=*`, { headers });
-                const itemData = await itemRes.json();
+            if (itemErr || !item) {
+                alert("해당 코드를 찾을 수 없습니다.");
+                resultArea.style.display = 'none';
+                return;
+            }
 
-                if (!itemData || itemData.length === 0) {
-                    alert("데이터가 없습니다. 코드를 확인하세요: " + code);
-                    return;
-                }
+            // B. logs 테이블에서 해당 코드의 이력 가져오기
+            const { data: logs, error: logErr } = await supabase
+                .from('logs')
+                .select('*')
+                .eq('item_code', code)
+                .order('created_at', { ascending: false });
 
-                document.getElementById('disp-code').innerText = itemData[0].item_code;
-                document.getElementById('disp-spec').innerText = itemData[0].item_spec;
-                document.getElementById('disp-use').innerText = itemData[0].item_use;
+            if (logErr) {
+                console.error(logErr);
+                return;
+            }
 
-                const logRes = await fetch(`${URL}/rest/v1/logs?logs_code=eq.${code}&select=*&order=created_at.desc`, { headers });
-                const logs = await logRes.json();
+            // C. 화면에 데이터 뿌리기
+            itemNameSpan.innerText = item.name;
+            logList.innerHTML = ''; // 기존 목록 초기화
+            resultArea.style.display = 'block';
 
-                const logList = document.getElementById('logList');
-                logList.innerHTML = "";
+            if (logs.length === 0) {
+                logList.innerHTML = '<li>이력이 없습니다.</li>';
+            } else {
                 logs.forEach(log => {
-                    logList.innerHTML += `<tr>
-                        <td>${new Date(log.created_at).toLocaleString()}</td>
-                        <td><span class="badge">${log.logs_context}</span></td>
-                        <td>${log.logs_person}</td>
-                    </tr>`;
+                    const li = document.createElement('li');
+                    li.className = 'log-item';
+                    li.innerHTML = `
+                        <span class="status-tag">[${log.status}]</span> 
+                        <span>${new Date(log.created_at).toLocaleString()}</span>
+                        <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #666;">상세내용: ${log.note || '없음'}</p>
+                    `;
+                    logList.appendChild(li);
                 });
-                document.getElementById('resultArea').style.display = 'block';
-            } catch (err) {
-                console.error(err);
             }
         }
-
-        // [추가] 모달 제어 함수
-        function openModal() {
-            const currentCode = document.getElementById('disp-code').innerText;
-            if (!currentCode) {
-                alert("먼저 물품을 조회해 주세요.");
-                return;
-            }
-            document.getElementById('newLogCode').value = currentCode;
-            document.getElementById('logModal').style.display = 'flex';
-        }
-
-        function closeModal() {
-            document.getElementById('logModal').style.display = 'none';
-        }
-
-        // [추가] 새 이력 저장 함수 (POST)
-        async function saveLog() {
-            const code = document.getElementById('newLogCode').value;
-            const person = document.getElementById('newLogPerson').value.trim();
-            const context = document.getElementById('newLogContext').value.trim();
-
-            if (!person || !context) {
-                alert("모든 필드를 입력해 주세요.");
-                return;
-            }
-
-            try {
-                const res = await fetch(`${URL}/rest/v1/logs`, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({
-                        logs_code: code,
-                        logs_person: person,
-                        logs_context: context
-                    })
-                });
-
-                if (res.ok) {
-                    alert("이력이 성공적으로 추가되었습니다.");
-                    closeModal();
-                    getHistory(code); // 리스트 갱신
-                    document.getElementById('newLogPerson').value = "";
-                    document.getElementById('newLogContext').value = "";
-                } else {
-                    const err = await res.text();
-                    alert("저장 실패: " + err);
-                }
-            } catch (e) {
-                console.error(e);
-                alert("네트워크 오류가 발생했습니다.");
-            }
-        }
-
-        window.onload = async () => {
-            await checkConnection();
-            const params = new URLSearchParams(window.location.search);
-            const code = params.get('code');
-            if (code) getHistory(code);
-        };
     </script>
 </body>
 </html>
