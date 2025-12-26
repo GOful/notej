@@ -71,6 +71,21 @@
             font-size: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; justify-content: center;
         }
 
+        /* 삭제 버튼 스타일 */
+        .btn-delete {
+            background: none;
+            border: none;
+            color: #ff4d4f;
+            cursor: pointer;
+            padding: 5px;
+            transition: 0.2s;
+        }
+        .btn-delete:hover {
+            color: #cf1322;
+            transform: scale(1.1);
+        }
+
+
         /* 모달 스타일 */
         .modal { 
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
@@ -230,6 +245,7 @@
 
             const logList = document.getElementById('logList');
             logList.innerHTML = "";
+            // getHistory 함수 내 로그 리스트 생성 부분
             logs.forEach(log => {
                 const date = new Date(log.created_at);
                 const timeStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
@@ -237,7 +253,14 @@
                 logList.innerHTML += `<tr>
                     <td style="color:#666;">${timeStr}</td>
                     <td><span class="type-tag">${log.logs_context}</span></td>
-                    <td class="user-info">${log.logs_person}</td>
+                    <td class="user-info">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            ${log.logs_person}
+                            <button class="btn-delete" onclick="deleteLog(${log.id}, '${log.logs_code}')" title="삭제">
+                                <i class="fa-regular fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </td>
                 </tr>`;
             });
             document.getElementById('resultArea').style.display = 'block';
@@ -291,6 +314,31 @@
             alert("저장 실패");
         }
     }
+
+    async function deleteLog(id, itemCode) {
+        if (!confirm("정말 이 이력을 삭제하시겠습니까?")) {
+            return;
+        }
+
+        try {
+            const res = await fetch(`${URL}/rest/v1/logs?id=eq.${id}`, {
+                method: 'DELETE',
+                headers: headers
+            });
+
+            if (res.ok) {
+                alert("삭제되었습니다.");
+                // 현재 보고 있는 물품의 이력을 다시 불러와서 화면 갱신
+                getHistory(itemCode);
+            } else {
+                const errorData = await res.json();
+                alert("삭제 실패: " + (errorData.message || "권한이 없거나 오류가 발생했습니다."));
+            }
+        } catch (e) {
+            console.error(e);
+            alert("삭제 중 오류가 발생했습니다.");
+        }
+    }    
 
     window.onload = async () => {
         await checkConnection();
