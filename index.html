@@ -32,11 +32,11 @@
 
         /* 조회 영역 */
         .search-group { display: flex; gap: 8px; }
-        input[type="text"] { 
+        input[type="text"], input[type="datetime-local"] { 
             flex: 1; padding: 12px 16px; border: 1.5px solid var(--border-color); border-radius: 8px; 
             font-size: 1rem; outline: none; transition: 0.2s; background: #fff;
         }
-        input[type="text"]:focus { border-color: var(--point-color); }
+        input:focus { border-color: var(--point-color); }
         
         .btn { padding: 12px 20px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
         .btn-search { background: var(--point-color); color: #fff; width: 100px; }
@@ -85,7 +85,6 @@
             transform: scale(1.1);
         }
 
-
         /* 모달 스타일 */
         .modal { 
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
@@ -115,7 +114,7 @@
 
 <div class="container">
     <header>
-        <h1>자재 관리 시스템</h1>
+        <h1>자재 이력관리 시스템</h1>
         <div class="status">
             <span id="status-dot" class="dot"></span>
             <span id="status-text">연결 확인 중</span>
@@ -200,6 +199,10 @@
             <input type="text" id="newLogCode" readonly style="background:#f8f9fa; color:#aaa;">
         </div>
         <div class="input-group">
+            <label>발생 일시</label>
+            <input type="datetime-local" id="newLogDate">
+        </div>
+        <div class="input-group">
             <label>담당자 성함</label>
             <input type="text" id="newLogPerson" placeholder="담당자를 입력하세요">
         </div>
@@ -223,6 +226,12 @@
         "Content-Type": "application/json",
         "Prefer": "return=minimal" 
     };
+
+    // 시간 포맷팅 함수 (YYYY-MM-DD HH:mm)
+    function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
+    }
 
     async function checkConnection() {
         const dot = document.getElementById('status-dot');
@@ -257,7 +266,6 @@
                 return;
             }
 
-            // 상세 정보 출력
             document.getElementById('disp-code').innerText = itemData[0].item_code;
             document.getElementById('disp-spec').innerText = itemData[0].item_spec;
             document.getElementById('disp-use').innerText = itemData[0].item_use;
@@ -269,11 +277,8 @@
             logList.innerHTML = "";
             
             logs.forEach(log => {
-                const date = new Date(log.created_at);
-                const timeStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')} ${date.getHours().toString().padStart(2,'0')}:${date.getMinutes().toString().padStart(2,'0')}`;
-                
                 logList.innerHTML += `<tr>
-                    <td style="color:#666;">${timeStr}</td>
+                    <td style="color:#666;">${formatDate(log.created_at)}</td>
                     <td><span class="type-tag">${log.logs_context}</span></td>
                     <td class="user-info">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -286,7 +291,6 @@
                 </tr>`;
             });
 
-            // [중요] 상세 결과 영역은 보이고, 메인 "최근 이력" 영역은 숨깁니다.
             document.getElementById('resultArea').style.display = 'block';
             document.getElementById('recentActivityArea').style.display = 'none'; 
             
@@ -301,6 +305,12 @@
             alert("조회된 물품이 없습니다.");
             return;
         }
+        
+        // 모달 열 때 현재 시간으로 기본 세팅
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('newLogDate').value = now.toISOString().slice(0, 16);
+
         document.getElementById('newLogCode').value = currentCode;
         document.getElementById('logModal').style.display = 'flex';
     }
@@ -313,9 +323,10 @@
         const code = document.getElementById('newLogCode').value;
         const person = document.getElementById('newLogPerson').value.trim();
         const context = document.getElementById('newLogContext').value.trim();
+        const inputDate = document.getElementById('newLogDate').value;
 
-        if (!person || !context) {
-            alert("담당자와 내용을 입력해 주세요.");
+        if (!person || !context || !inputDate) {
+            alert("모든 필드를 입력해 주세요.");
             return;
         }
 
@@ -326,7 +337,8 @@
                 body: JSON.stringify({
                     logs_code: code,
                     logs_person: person,
-                    logs_context: context
+                    logs_context: context,
+                    created_at: new Date(inputDate).toISOString() // 선택한 시간을 ISO 형식으로 전송
                 })
             });
 
@@ -345,8 +357,6 @@
     async function loadRecentLogs() {
         const recentLogArea = document.getElementById('recentActivityArea');
         const recentLogList = document.getElementById('recentLogList');
-        
-        // 조회가 아닌 메인 상태일 때만 보이도록 설정
         recentLogArea.style.display = 'block';
 
         try {
@@ -355,12 +365,9 @@
 
             recentLogList.innerHTML = "";
             logs.forEach(log => {
-                const date = new Date(log.created_at);
-                const timeStr = `${(date.getMonth()+1)}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2,'0')}`;
-                
                 recentLogList.innerHTML += `
                     <tr onclick="getHistory('${log.logs_code}')" style="cursor:pointer; transition: background 0.2s;">
-                        <td style="color:#888; font-size:0.8rem;">${timeStr}</td>
+                        <td style="color:#888; font-size:0.8rem;">${formatDate(log.created_at)}</td>
                         <td><strong style="color:var(--point-color)">${log.logs_code}</strong></td>
                         <td><span class="type-tag">${log.logs_context}</span></td>
                         <td class="user-info">${log.logs_person}</td>
@@ -371,12 +378,8 @@
         }
     }
 
-
-
     async function deleteLog(id, itemCode) {
-        if (!confirm("정말 이 이력을 삭제하시겠습니까?")) {
-            return;
-        }
+        if (!confirm("정말 이 이력을 삭제하시겠습니까?")) return;
 
         try {
             const res = await fetch(`${URL}/rest/v1/logs?id=eq.${id}`, {
@@ -386,28 +389,22 @@
 
             if (res.ok) {
                 alert("삭제되었습니다.");
-                // 현재 보고 있는 물품의 이력을 다시 불러와서 화면 갱신
                 getHistory(itemCode);
             } else {
-                const errorData = await res.json();
-                alert("삭제 실패: " + (errorData.message || "권한이 없거나 오류가 발생했습니다."));
+                alert("삭제 실패");
             }
         } catch (e) {
-            console.error(e);
-            alert("삭제 중 오류가 발생했습니다.");
+            alert("오류 발생");
         }
     }    
 
     window.onload = async () => {
         await checkConnection();
-        
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code');
-        
         if (code) {
             getHistory(code);
         } else {
-            // 검색된 코드가 없으면(메인화면이면) 최근 이력을 보여줍니다.
             loadRecentLogs();
         }
     };
